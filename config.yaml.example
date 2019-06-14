@@ -20,8 +20,12 @@ notify:
     blacklist_channels:
         - privategroup1
         - '#publichannel2'
+    email_ping_channels:
+        - 'channel1'
 
 # Always mark messages in these channels read immediately.
 mark_read_channels:
     - privategroup1
     - '#publichannel2'
+
+mark_unstarred_channels_as_read: false

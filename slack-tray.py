@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import sys
 import os
@@ -17,6 +17,8 @@ import yaml
 from collections import defaultdict
 import traceback
 
+config = {}
+
 AT_HERE_RE = re.compile('<!(here|group|everyone|channel)(|[a-z]+)?>', re.I)
 config = {}
 
@@ -31,7 +33,7 @@ class memoize(dict):
         try:
             return self[args]
         except TypeError:
-            print "error memoizing:"
+            print("error memoizing:")
             traceback.print_exc()
             return self.f(*args)
 
@@ -64,9 +66,8 @@ yaml.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, dotdict_con
 
 def read_config(path):
     global config
-
     with open(path) as config_file:
-        config = yaml.load(config_file)
+        config = yaml.safe_load(config_file)
 
 
 def get_rtm_info(client):
@@ -82,7 +83,7 @@ def update_starred_channels(client):
         response = client.api_call('stars.list')
         stars = response['items']
         starred_channels = [star['channel'] for star in stars if star['type'] in ('channel', 'group')]
-        config.starred_channels = starred_channels
+        config['starred_channels'] = starred_channels
     except:
         traceback.print_exc()
 
@@ -181,7 +182,7 @@ def log_ping(client, channel_name, user, message):
     # "slackbot".  username=channel_name causes the channel name to appear as
     # a heading of sorts.
 
-    print "log_ping", channel_name, user, message
+    print("log_ping", channel_name, user, message)
 
     client.api_call('chat.postMessage',
         as_user=False,
@@ -214,20 +215,20 @@ def notify(subject, message):
 
 
 def ping(message):
-    print "PING:", message
-    play(config.sounds.ping)
+    print("PING:", message)
+    play(config["sounds"]["ping"])
     notify("Slack Chat", message)
 
 
 def pm(message):
-    print "PM:", message
-    play(config.sounds.pm)
+    print("PM:", message)
+    play(config["sounds"]["pm"])
     notify("Slack PM", message)
 
 
 def email(subject, message):
-    print "EMAIL:", message
-    play(config.sounds.email)
+    print("EMAIL:", message)
+    play(config["sounds"]["email"])
     notify(subject, message)
 
 
@@ -284,15 +285,15 @@ def mainLoop():
 
     read_config(sys.argv[1])
 
-    client = SlackClient(config.api_key)
+    client = SlackClient(config['api_key'])
 
     info = get_rtm_info(client)
     muted_channels = info['self']['prefs']['muted_channels'].split(',')
     highlight_words = info['self']['prefs']['highlight_words'].split(',') + [info['self']['name'], "<@%s>" % info['self']['id']]
     highlight_re = build_highlight_re(highlight_words)
-    no_highlight_re = build_highlight_re(config.notify.blacklist_words)
+    no_highlight_re = build_highlight_re(config["notify"]["blacklist_words"])
 
-    if config.mark_unstarred_channels_as_read:
+    if config["mark_unstarred_channels_as_read"]:
         update_starred_channels(client)
         gobject.timeout_add(60000, update_starred_channels, client)
 
@@ -307,7 +308,7 @@ def mainLoop():
     last_ping = time.time()
     last_pong = time.time()
 
-    print "ready"
+    print("ready")
 
     while True:
         messages = client.rtm_read()
@@ -320,7 +321,7 @@ def mainLoop():
                 elif channel is None:
                     channel_name = None
                 else:
-                    print "wtf is this channel: ", type(channel), repr(channel), channel
+                    print("wtf is this channel: ", type(channel), repr(channel), channel)
 
                 channel_name = get_channel_name(client, channel)
                 timestamp = message.get('ts')
@@ -338,17 +339,17 @@ def mainLoop():
                     and user != "USLACKBOT"):
                         channels[channel].add_unread(timestamp)
                         is_muted = channel in muted_channels
-                        is_highlight = highlight_re.search(text) and not (config.notify.blacklist_words and no_highlight_re.search(text))
+                        is_highlight = highlight_re.search(text) and not (config["notify"]["blacklist_words"] and no_highlight_re.search(text))
                         is_at_here = not is_muted and AT_HERE_RE.search(text)
                         is_pm = channel.startswith('D') or channel_name.startswith("mpdm-")
 
-                        if user != info['self']['id'] and channel_name not in config.notify.blacklist_channels:
+                        if user != info['self']['id'] and channel_name not in config["notify"]["blacklist_channels"]:
                             notification_function = None
 
                             if is_pm:
                                 notification_function = pm
                             elif is_highlight or is_at_here:
-                                if config.log_pings and channel in muted_channels:
+                                if config["log_pings"]and channel in muted_channels:
                                     gobject.idle_add(log_ping, client, channel_name, get_user_name(client, user), render(client, text))
 
                                 notification_function = ping
@@ -356,11 +357,11 @@ def mainLoop():
                             if notification_function:
                                 channels[channel].add_highlight(timestamp)
                                 notification_function("%s %s: %s" % (channel_name, get_user_name(client, user), render(client, text)))
-                        if channel_name in config.mark_read_channels or is_muted:
+                        if channel_name in config["mark_read_channels"] or is_muted:
                                 # print "mark read:", channel
                                 channels[channel].update_marker(timestamp)
                                 gobject.idle_add(mark_read, client, channel, timestamp)
-                elif (channel_name in config.notify.email_ping_channels
+                elif (channel_name in config["notify"]["email_ping_channels"]
                       and mtype == "message" and message.get('upload')):
                         email(message['username'], message['file']['title'])
                 elif mtype in ('channel_marked', 'im_marked', 'group_marked'):
@@ -391,7 +392,7 @@ def mainLoop():
 
         if time.time() - last_pong > 60:
             try:
-                print "lost connection, reconnecting..."
+                print("lost connection, reconnecting...")
                 client.rtm_connect()
             except socket.error:
                 # we'll end up retrying after 60 seconds with no pong
